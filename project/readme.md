@@ -7,7 +7,8 @@ stateDiagram-v2
     direction TB
     
     %% Definición de los nodos (Estados)
-    state "ST_IDLE (000)\nReposo" as IDLE
+    state "ST_IDLE (000)
+          Reposo" as IDLE
     state "ST_LOAD (001)\nCarga Inicial" as LOAD
     state "ST_ROUND_OP (010)\nBucle de 31 Rondas" as ROUND_OP
     state "ST_FINAL_XOR (011)\nPost-blanqueo" as FINAL_XOR
