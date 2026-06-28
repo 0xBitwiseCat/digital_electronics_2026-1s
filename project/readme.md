@@ -2,6 +2,7 @@
 ## Implementation of a lightweight cryptography algorithm for low-capacity IoT devices 
 
 ### FSM
+```mermaid
 stateDiagram-v2
     direction TB
     
@@ -29,5 +30,6 @@ stateDiagram-v2
     DONE --> STANDBY : Siguiente reloj\n(Genera pulso done = 1)
     
     STANDBY --> STANDBY : start == 1\n(done = 0)
+```
     
     STANDBY --> IDLE : start == 0
