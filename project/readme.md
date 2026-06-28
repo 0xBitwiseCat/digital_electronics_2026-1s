@@ -3,6 +3,7 @@
 
 ### FSM
 The following diagram represents algorithm-flow using a finite state machine for PRESENT-80
+
 ```mermaid
 stateDiagram-v2
     direction TB
@@ -39,5 +40,7 @@ stateDiagram-v2
     STANDBY --> STANDBY : start == 1 (done = 0)
 
     STANDBY --> IDLE : start == 0
-
 ```
+
+> [!NOTE]
+> Each step has its own functionality implement by the modules in this repo.
