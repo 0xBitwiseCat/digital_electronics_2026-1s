@@ -15,97 +15,54 @@ Verilog scripts for Digital Electronics I [Lab/Final Project] 2026-1S - Universi
 10. Entrega
 ```mermaid
 flowchart TD
-    subgraph PC["🖥️ Host PC (Python)"]
-        PY_TX["Transmisor\n(19 Bytes: Texto + Llave + CRC)"]
-        PY_RX["Receptor\n(9 Bytes: Cifrado + CRC)"]
-    end
+    %% Definición de estilos para el informe
+    classDef state fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#000
+    classDef decision fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef action fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef error fill:#ffebee,stroke:#d32f2f,stroke-width:2px,color:#000
+    classDef start_end fill:#333,stroke:#000,stroke-width:2px,color:#fff
 
-    subgraph FPGA["⚙️ FPGA (top.v)"]
-        
-        subgraph UART["Capa Física UART"]
-            RX["uart_rx.v"]
-            TX["uart_tx.v"]
-        end
-
-        subgraph WRAPPER["uart_wrapper.v (Controlador Puente)"]
-            FSM["Máquina de Estados (FSM)"]
-            CRC["crc8_byte.v"]
-            BUF_IN["Registros de Recepción\n(Plaintext + Key)"]
-            BUF_OUT["Registros de Transmisión\n(Ciphertext)"]
-        end
-
-        subgraph CORE["present_80_core.v (Núcleo Criptográfico)"]
-            DP["Datapath (64-bit)"]
-            KS["Key Schedule (80-bit)"]
-        end
-    end
-
-    %% Conexiones PC a FPGA
-    PY_TX -- "Cable USB (Serial RX)" --> RX
-    TX -- "Cable USB (Serial TX)" --> PY_RX
-
-    %% Interfaz UART a Wrapper
-    RX -- "rx_data (8-bit)" --> BUF_IN
-    RX -- "rx_ready" --> FSM
-    FSM -- "tx_start" --> TX
-    BUF_OUT -- "tx_data (8-bit)" --> TX
-
-    %% Validación CRC
-    BUF_IN -. "Valida Integridad" .-> CRC
-    BUF_OUT -. "Genera Firma Salida" .-> CRC
-
-    %% Interfaz Wrapper a Core
-    FSM -- "start" --> CORE
-    BUF_IN -- "plaintext (64-bit)\nkey_in (80-bit)" --> DP
-    CORE -- "done" --> FSM
-    DP -- "ciphertext (64-bit)" --> BUF_OUT
-
-    %% Estilos
-    classDef pc fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
-    classDef fpga fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
-    classDef core fill:#ffe0b2,stroke:#e65100,stroke-width:2px;
+    %% Nodos principales
+    START(((Reset / Inicio))):::start_end --> IDLE
     
-    class PC pc;
-    class FPGA fpga;
-    class CORE core;
-```
-
-```mermaid
-stateDiagram-v2
-    direction TB
+    IDLE["<b>S_IDLE</b><br>Espera de primer byte"]:::state --> RX_READY{"rx_ready == 1?"}:::decision
+    RX_READY -- No --> IDLE
     
-    state "S_IDLE\n(Espera de datos UART)" as IDLE
-    state "S_RECV\n(Llenando buffer temporal)" as RECV
-    state "S_CHECK_CRC\n(Validación de integridad)" as CHECK_CRC
-    state "S_START_CORE\n(Disparo del cifrado)" as START_CORE
-    state "S_WAIT_CORE\n(Esperando procesamiento)" as WAIT_CORE
-    state "S_LOAD_TX\n(Ensamblaje de respuesta)" as LOAD_TX
-    state "S_SEND_BYTE\n(Envío al transceptor TX)" as SEND_BYTE
-    state "S_SEND_WAIT\n(Espera de línea libre)" as SEND_WAIT
-    state "S_DONE\n(Limpieza y reinicio)" as DONE
-
-    [*] --> IDLE : Reset (rst_n = 0)
+    RX_READY -- Sí --> RECV["<b>S_RECV</b><br>Recibe byte y acumula<br>crc_calc al vuelo"]:::state
+    RECV --> CHECK_COUNT{"byte_cnt == 18?"}:::decision
     
-    IDLE --> RECV : rx_ready = 1
+    CHECK_COUNT -- No --> WAIT_NEXT["Espera siguiente byte"]:::state
+    WAIT_NEXT --> RX_READY_2{"rx_ready == 1?"}:::decision
+    RX_READY_2 -- No --> WAIT_NEXT
+    RX_READY_2 -- Sí --> RECV
     
-    RECV --> RECV : rx_cnt < 19
-    RECV --> CHECK_CRC : rx_cnt == 19
+    CHECK_COUNT -- Sí (Trama completa) --> CHECK_CRC["<b>S_CHECK_CRC</b><br>Verificación de integridad"]:::state
+    CHECK_CRC --> IS_CRC_OK{"crc_calc == rx_buf[18]?"}:::decision
     
-    CHECK_CRC --> START_CORE : CRC Correcto
-    CHECK_CRC --> IDLE : CRC Incorrecto (Aborta trama)
+    IS_CRC_OK -- No --> ERROR["Error de CRC<br>Trama Descartada"]:::error
+    ERROR --> IDLE
     
-    START_CORE --> WAIT_CORE : start = 1
+    IS_CRC_OK -- Sí --> START_CORE["<b>S_START_CORE</b><br>Ensambla Llave y Plaintext<br>start = 1"]:::action
+    START_CORE --> WAIT_CORE["<b>S_WAIT_CORE</b><br>Procesando PRESENT-80"]:::state
     
-    WAIT_CORE --> WAIT_CORE : done = 0
-    WAIT_CORE --> LOAD_TX : done = 1 (Cifrado exitoso)
+    WAIT_CORE --> IS_DONE{"done == 1?"}:::decision
+    IS_DONE -- No --> WAIT_CORE
     
-    LOAD_TX --> SEND_BYTE : Divide 64-bit en 8 bytes + CRC
+    IS_DONE -- Sí --> PREP_TX["<b>S_PREP_TX</b><br>Empaqueta Ciphertext<br>Calcula CRC TX"]:::action
+    PREP_TX --> SEND_WAIT["<b>S_SEND_WAIT</b><br>Espera puerto libre"]:::state
     
-    SEND_BYTE --> SEND_WAIT : tx_start = 1
+    SEND_WAIT --> IS_BUSY{"tx_busy == 0?"}:::decision
+    IS_BUSY -- No --> SEND_WAIT
     
-    SEND_WAIT --> SEND_WAIT : tx_busy = 1
-    SEND_WAIT --> SEND_BYTE : tx_busy = 0 & tx_cnt < 9
-    SEND_WAIT --> DONE : tx_busy = 0 & tx_cnt == 9
+    IS_BUSY -- Sí --> SEND_BYTE["<b>S_SEND_BYTE</b><br>Transmite Byte (tx_start = 1)"]:::action
+    SEND_BYTE --> WAIT_BUSY{"tx_busy == 1?"}:::decision
     
-    DONE --> IDLE : Transmisión finalizada
+    WAIT_BUSY -- No --> WAIT_BUSY
+    WAIT_BUSY -- Sí --> CHECK_TX_CNT{"tx_cnt == 8?"}:::decision
+    
+    CHECK_TX_CNT -- No (Siguiente Byte) --> INC_CNT["tx_cnt++"]:::action
+    INC_CNT --> SEND_WAIT
+    
+    CHECK_TX_CNT -- Sí (Fin de Trama) --> DONE["<b>S_DONE</b><br>Transmisión Finalizada"]:::action
+    DONE --> IDLE
 ```
