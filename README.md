@@ -68,7 +68,9 @@ flowchart TD
     class PC pc;
     class FPGA fpga;
     class CORE core;
+```
 
+```mermaid
 stateDiagram-v2
     direction TB
     
