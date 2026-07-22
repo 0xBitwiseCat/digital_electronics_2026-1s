@@ -1,5 +1,7 @@
 // =============================================================================
 // tft_display.v  (v2) — TFT ILI9341 para el proyecto PRESENT-80
+//utilizaremos un repositorio que esta en este enlace: https://github.com/thekroko/ili9341_fpga/blob/master/clkdiv.v
+// como guia para la implementación de esta pantalla TFT en la fpga.
 //
 // Muestra en pantalla TODA la operacion de cifrado:
 //   Linea 1: "FPGA ENCRYPTOR"          (verde)
